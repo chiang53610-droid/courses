@@ -57,6 +57,7 @@
 - [附錄 10.1：串連提示詞（Chaining Prompts）](10_1_Appendix_Chaining_Prompts.md)
 - [附錄 10.2：工具使用（Tool Use）](10_2_Appendix_Tool_Use.md)
 - [附錄 10.3：搜尋與檢索（Search & Retrieval）](10_3_Appendix_Search_and_Retrieval.md)
+- [附錄 10.4（加碼，原本只在 Bedrock 版）：實證效能評估](10_4_Appendix_Empirical_Performance_Evaluations.md)
 
 > 💡 **關於 Amazon Bedrock 版本**：原課程資料夾裡還有一個 `AmazonBedrock` 版本，內容和這裡（`Anthropic 1P` 版）幾乎一樣，差別只在於「怎麼連線到 Claude」（透過 AWS 的 Bedrock 服務，而不是直接用 Anthropic 的 API 金鑰）。新手版以 `Anthropic 1P` 版為準，Bedrock 版的差異整理在[這份說明](bedrock_version_notes.md)裡。
 
