@@ -1,5 +1,7 @@
 # Anthropic courses
 
+> 🇹🇼 **繁體中文・新手白話版**：給程式新手的完整中文版課程（白話解說、逐行說明、可直接執行的程式碼），請見 [`zh-TW-beginner/`](./zh-TW-beginner/README.md)。
+
 Welcome to Anthropic's educational courses. This repository currently contains five courses.  We suggest completing the courses in the following order:
 
 1. [Anthropic API fundamentals](./anthropic_api_fundamentals/README.md) - teaches the essentials of working with the Claude SDK: getting an API key, working with model parameters, writing multimodal prompts, streaming responses, etc.
