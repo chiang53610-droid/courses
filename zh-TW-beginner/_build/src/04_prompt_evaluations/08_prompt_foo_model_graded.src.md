@@ -1,0 +1,364 @@
+<!--meta {"orig": "prompt_evaluations/08_prompt_foo_model_graded/lesson.ipynb", "out": "04_prompt_evaluations/08_prompt_foo_model_graded/lesson"} -->
+# 4-8 用 promptfoo 做模型評分的評估
+
+> 📚 **第 4 單元：提示詞評估**｜第 8 課 / 共 9 課
+> ⏱️ 預估時間：35 分鐘
+
+## 🎯 這一課你會學到
+
+- 什麼是**模型評分（model-graded）**的評估：讓 LLM 當「評審」
+- 使用 promptfoo 內建的 **`llm-rubric`** 斷言
+- 一次用**兩個評分標準**評估三個版本的提示詞
+
+> 📁 **這一課的檔案已經準備好了**：和這份講義同一個資料夾裡有最終版的 `promptfooconfig.yaml`。回答問題的模型已換成 `claude-sonnet-4-6`，當評審的模型已換成 `claude-opus-4-6`。
+>
+> 🔄 **2026 更新**：講義中的 YAML 範例保留原課程的舊模型名稱，實際執行請用資料夾裡已更新的檔案。截圖是原課程的結果。
+
+---
+
+**注意：這一課所在的資料夾裡有相關的程式碼檔案。如果你想跟著執行評估，請下載整個資料夾。**
+
+到目前為止，我們只寫過**程式評分**的評估。只要可能，程式評分的評估是執行起來最簡單、最便宜的評估。它們根據預先定義好的標準，提供明確、客觀的評估，非常適合結果簡單、可量化的任務。問題是，程式評分的評估只能評分某些類型的輸出——主要是那些可以簡化成完全比對、數字比較或其他可程式化邏輯的輸出。
+
+然而，很多語言模型在真實世界的應用，都需要更細膩的評估。假設我們想做一個在**國中教室**使用的聊天機器人。我們可能會想評估輸出，確保它們使用符合年齡的語言、保持有教育意義的語氣、避免回答非學業的問題，或是用適合國中生的複雜程度提供解釋。這些標準是**主觀的、依情境而定的**，很難用傳統的程式方法來評估。這就是模型評分評估能派上用場的地方！
+
+模型評分的評估，利用大型語言模型的能力，根據更複雜、更細膩的標準來評估輸出。透過使用另一個模型當作評估者，我們可以運用和產生原始回答同等級的語言理解和情境意識。這個方法讓我們能建立更精細的評估指標，考量像語氣、相關性、適當性，甚至創意這些因素——這些通常是程式評分系統做不到的。
+
+模型評分評估背後的核心概念，是**把「評估」本身當成一個自然語言處理的任務**。我們提供給評估模型下面這些東西的某種組合：
+
+* 原始的提示詞或問題
+* 我們想評估的、模型產生的回答
+* 一套評估的標準或準則
+* 如何評估和打分數的指示
+
+這個方法讓我們能更全面地評估輸出，不只考慮事實的正確性，還考慮風格元素、是否遵守特定準則，以及回答在預期用途下的整體品質。
+
+常見的模型評分技巧，包括問評審模型：
+
+* 這個回答有多「道歉」？
+* 根據提供的背景，這個回答在事實上正確嗎？
+* 這個回答是不是太常提到它的背景資料／資訊？
+* 這個回答真的有適當地回答問題嗎？
+* 這個輸出有多符合我們的語氣／品牌／風格準則？
+
+在這一課，我們會用 promptfoo 寫一個我們自己的簡單模型評分評估。
+
+> 🧩 **白話小補充**：模型評分就像請一位「AI 老師」來改作文。你給它評分標準（例如「回答有沒有拒絕非學業的問題？」），它讀完回答後，判斷通過或不通過，還會說明理由。
+
+---
+
+## 用 promptfoo 做模型評分的評估
+
+（原課程這裡的標題拼成了「Mdel-graded」，應為「Model-graded」。）
+
+就像 promptfoo 裡大部分的事情一樣，撰寫模型評分的評估有好幾種有效的做法。在這一課，我們會看到最簡單的模式：**使用內建的斷言**。在下一課，我們會看到怎麼寫我們自己的自訂模型評分斷言函式。
+
+首先，我們會使用一個叫做 **`llm-rubric`** 的內建斷言，它是 promptfoo 用於「**LLM 當評審（LLM as a judge）**」評估的通用評分器。使用方法很簡單，只要在你的 `promptfooconfig.yaml` 檔案中加入下面這段：
+
+```yaml
+assert:
+  - type: llm-rubric
+    # The model we want to use as the grader
+    provider: anthropic:messages:claude-3-opus-20240229
+    # Specify the criteria for grading the LLM output:
+    value: Is not apologetic
+```
+
+（兩行註解的意思：「我們想用來當評分者的模型」、「指定評分 LLM 輸出的標準」。）
+
+上面這個斷言會用 Claude 3 Opus，根據「回答是否帶有道歉意味」來替輸出評分。（`Is not apologetic` = 「沒有道歉的語氣」。）
+
+我們來試試在我們自己的評估中使用 `llm-rubric`！
+
+> 🧩 **白話小補充**：「rubric」是「評分準則」的意思。`llm-rubric` 就是「讓 LLM 依照你寫的評分準則來評分」。`value` 就是你寫的準則（用一句話描述「好的回答應該怎樣」）。
+
+---
+
+## 撰寫我們自己的評估
+
+在這一課，我們會專注在評估一個「**國中生學業助理**」的提示詞。我們要做一個聊天機器人，它應該回答和學校科目相關的問題，但應該避免回答無關的問題。我們從一個像這樣的簡單提示詞開始：
+
+```
+You are an interactive tutor assistant for middle school children.
+Students will ask you a question and your job is to respond with explanations that are understandable to a middle school audience.
+Only answer questions related to middle school academics.
+This is the student question: {{question}}
+```
+
+**翻譯**：「你是一位給國中生的互動式家教助理。學生會問你問題，你的工作是用國中生聽得懂的解釋來回答。只回答和國中學業有關的問題。這是學生的問題：{{question}}」
+
+我們會寫一個模型評分的評估，確保模型會**拒絕回答**像「我要怎麼讓爸媽買手機給我？」或「有哪些好玩的免費電動？」這類問題。理論上，我們可以試著寫一個程式評分的評估，用正規表達式尋找「I'm sorry」、「I can't help」這類關鍵的拒絕用語，但這是一個非常**脆弱**的方法（模型拒絕的說法有千百種，很難全部列舉）。用模型來替回答評分，能得到好得多的結果。
+
+---
+
+## 初始化 promptfoo
+
+一如往常，第一步是初始化 promptfoo。在一個新的資料夾裡，執行下面的指令：
+
+```bash
+npx promptfoo@latest init
+```
+
+---
+
+## 基本設定
+
+為了讓事情更簡單，我們不會像之前那樣把提示詞放在另一個檔案裡。我們會把提示詞和測試**直接寫在 `promptfooconfig.yaml` 檔案裡**。把檔案原本的內容刪掉，換成這樣：
+
+```yaml
+description: "School Assistant Eval"
+
+prompts:
+  - >- 
+    You are an interactive tutor assistant for middle school children.
+    Students will ask you a question and your job is to respond with explanations that are understandable to a middle school audience.
+    Only answer questions related to middle school academics.
+    This is the student question {{question}}
+
+providers: [anthropic:messages:claude-3-5-sonnet-20240620]
+  # - anthropic:messages:claude-3-haiku-20240307
+
+defaultTest:
+  assert:
+    - type: llm-rubric
+      provider: anthropic:messages:claude-3-opus-20240229
+      value: 'Refuses to answer the question and instead redirects to academic topics'
+
+tests:
+  - vars:
+      question: What's the best free mobile video game?
+  - vars:
+      question: How can I convince my parents to let me stay up later?
+  - vars:
+      question: What are some fun theme ideas for a sleepover?
+  - vars:
+      question: What are some good prank ideas that won't get me in trouble?
+  - vars:
+      question: Who are some famous left footed soccer players?
+```
+
+上面的設定包含下面這些：
+
+* `prompts`：包含我們想評估的初始基本提示詞。記住，我們通常會把提示詞放在 Python 檔案裡，但也可以選擇直接寫在設定檔裡。
+* `providers`：告訴 promptfoo 我們想用 Claude 3.5 Sonnet 執行我們的提示詞。（`[...]` 是 YAML 裡另一種寫清單的方式；下一行 `# - ...haiku...` 是被註解掉的選項。）
+* `defaultTest`：promptfoo 執行的每一個測試，我們都想用 `llm-rubric` 來評分，確保輸出**拒絕回答問題，並把話題導回學業主題**（`'Refuses to answer the question and instead redirects to academic topics'`）。在這個例子中，我們告訴 promptfoo 用 Claude 3 Opus 來評分。
+* `tests`：我們想執行的測試集合。我們通常在 CSV 檔案裡指定這些測試，但也可以直接寫在 YAML 檔裡。這些測試都包含我們**希望模型拒絕回答**的問題：
+  - 最好玩的免費手機遊戲是什麼？
+  - 我要怎麼說服爸媽讓我晚一點睡？
+  - 有哪些好玩的過夜派對主題點子？
+  - 有哪些不會讓我惹上麻煩的惡作劇點子？
+  - 有哪些有名的左腳足球員？
+
+下一步是用這個指令執行評估：
+
+```bash
+npx promptfoo@latest eval
+```
+
+這是我們第一次執行這個評估時產生的輸出：
+
+![第一次評估的結果](@orig/images/eval1.png)
+
+我們的提示詞在大部分的評估資料集上都有效（雖然這是一個非常小的資料集），但看起來模型很樂意回答關於足球員的問題。下面這張 promptfoo 網頁畫面的截圖，展示了模型的回答，以及評審模型的評分邏輯：
+
+![足球員那一題的回答和評審的理由](@orig/images/soccer_players.png)
+
+我們來試著加入第二個更詳細的提示詞，看看能不能讓模型專注在學業科目上。
+
+---
+
+## 第二個提示詞
+
+我們來加入第二個提示詞，裡面包含一些準則，具體說明模型應該討論哪些主題：
+
+>  You are an interactive tutor assistant for middle school children.
+    Students will ask you a question and your job is to respond with explanations that are understandable to a middle school audience.
+    Only answer questions related to middle school academics.
+    Acceptable topics you should respond to include: math, reading, science, foreign languages, social students, and art.
+    Refuse to answer questions not related to the above topics in an academic context.
+    This is the student question: {{question}}
+
+**新增的兩句翻譯**：「你可以回答的主題包括：數學、閱讀、自然科學、外語、社會科（原文誤拼成 social students，應為 social studies）和美術。拒絕回答在學業脈絡下與上述主題無關的問題。」
+
+把 `promptfooconfig.yaml` 檔案更新成這樣：
+
+```yaml
+description: "School Assistant Eval"
+
+prompts:
+  - >- 
+    You are an interactive tutor assistant for middle school children.
+    Students will ask you a question and your job is to respond with explanations that are understandable to a middle school audience.
+    Only answer questions related to middle school academics.
+    This is the student question: {{question}}
+  - >- 
+    You are an interactive tutor assistant for middle school children.
+    Students will ask you a question and your job is to respond with explanations that are understandable to a middle school audience.
+    Only answer questions related to middle school academics.
+    Acceptable topics you should respond to include: math, reading, science, foreign languages, social students, and art.
+    Refuse to answer questions not related to the above topics in an academic context.
+    This is the student question: {{question}}
+
+
+providers: [anthropic:messages:claude-3-5-sonnet-20240620]
+
+defaultTest:
+  assert:
+    - type: llm-rubric
+      provider: anthropic:messages:claude-3-opus-20240229
+      value: 'Refuses to answer the question and instead redirects to academic topics'
+
+tests:
+  - vars:
+      question: What's the best free mobile video game?
+  - vars:
+      question: How can I convince my parents to let me stay up later?
+  - vars:
+      question: What are some fun theme ideas for a sleepover?
+  - vars:
+      question: What are some good prank ideas that won't get me in trouble?
+  - vars:
+      question: Who are some famous left footed soccer players?
+```
+
+我們現在有兩個要評估的提示詞了！我們再用這個指令執行一次評估：
+
+```bash
+npx promptfoo@latest eval
+```
+
+這是我們得到的結果：
+
+![兩個提示詞的評估結果](@orig/images/eval2.png)
+
+看起來，我們對第二個提示詞的修改造成了差別！請注意，這個評估資料集太小，在真實世界中沒什麼用處。
+
+---
+
+## 評分「是否道歉」
+
+仔細看模型的輸出，我們注意到大部分的輸出都以「I'm sorry（對不起）」或「I apologize（我很抱歉）」這類道歉開頭。這對使用者來說不是理想的體驗，所以我們決定試著改善這一點！我們想評估第三個提示詞：
+
+> You are an interactive tutor assistant for middle school children.
+    Students will ask you a question and your job is to respond with explanations that are understandable to a middle school audience.
+    Only answer questions related to middle school academics.
+    Acceptable topics you should respond to include: math, reading, science, foreign languages, social students, and art.
+    Refuse to answer questions not related to the above topics in an academic context.
+    Do not apologize or use an apologetic tone when refusing.  Instead, gently nudge students to focus on school-related topics.
+    This is the student question: {{question}}
+
+**新增的一句翻譯**：「拒絕時**不要道歉或使用道歉的語氣**。相反地，溫和地引導學生專注在和學校相關的主題上。」
+
+上面這個提示詞明確告訴模型避免道歉，改成專注在溫和地引導學生關注學業主題。
+
+接著，我們加入**第二個 `llm-rubric` 斷言**，測試模型的輸出是否帶有道歉意味。把 `promptfooconfig.yaml` 更新成這樣：
+
+```yaml
+description: "School Assistant Eval"
+
+prompts:
+  - >- 
+    You are an interactive tutor assistant for middle school children.
+    Students will ask you a question and your job is to respond with explanations that are understandable to a middle school audience.
+    Only answer questions related to middle school academics.
+    This is the student question: {{question}}
+  - >- 
+    You are an interactive tutor assistant for middle school children.
+    Students will ask you a question and your job is to respond with explanations that are understandable to a middle school audience.
+    Only answer questions related to middle school academics.
+    Acceptable topics you should respond to include: math, reading, science, foreign languages, social students, and art.
+    Refuse to answer questions not related to the above topics in an academic context.
+    This is the student question: {{question}}
+  - >- 
+    You are an interactive tutor assistant for middle school children.
+    Students will ask you a question and your job is to respond with explanations that are understandable to a middle school audience.
+    Only answer questions related to middle school academics.
+    Acceptable topics you should respond to include: math, reading, science, foreign languages, social students, and art.
+    Refuse to answer questions not related to the above topics in an academic context.
+    Do not apologize or use an apologetic tone when refusing.  Instead, gently nudge students to focus on school-related topics.
+    This is the student question: {{question}}
+
+
+providers: [anthropic:messages:claude-3-5-sonnet-20240620]
+
+defaultTest:
+  assert:
+    - type: llm-rubric
+      provider: anthropic:messages:claude-3-opus-20240229
+      value: 'Refuses to answer the question and instead redirects to academic topics'
+    - type: llm-rubric
+      provider: anthropic:messages:claude-3-opus-20240229
+      value: 'Is not apologetic'
+
+tests:
+  - vars:
+      question: What's the best free mobile video game?
+  - vars:
+      question: How can I convince my parents to let me stay up later?
+  - vars:
+      question: What are some fun theme ideas for a sleepover?
+  - vars:
+      question: What are some good prank ideas that won't get me in trouble?
+  - vars:
+      question: Who are some famous left footed soccer players?
+```
+
+我們現在有三個要測試的提示詞。對於每個測試案例，我們用模型評分兩個不同的面向：
+* 模型應該**拒絕**回答問題
+* 模型**不應該**道歉
+
+（`assert:` 底下列了兩個斷言，兩個都通過才算這個測試通過。）
+
+我們來執行評估：
+
+```bash
+npx promptfoo@latest eval
+```
+
+這是我們得到的結果：
+
+![三個提示詞、兩個評分標準的結果](@orig/images/eval3.png)
+
+如預期，前兩個提示詞在「道歉」的斷言上失敗了，但第三個提示詞看起來成功了！
+
+我們用這個指令啟動網頁畫面：
+
+```bash
+npx promptfoo@latest view
+```
+
+![網頁儀表板](@orig/images/web_view.png)
+
+記得，我們可以點擊放大鏡圖示，查看每個模型輸出和對應斷言評分的更多細節。我們來仔細看看第一列的第二個項目：
+
+![第一列第二個項目的細節](@orig/images/details1.png)
+
+我們可以看到，這個輸出通過了原本的模型評分斷言，確實拒絕回答了離題的問題。我們也可以看到，這個輸出沒有通過我們新增的第二個斷言，因為「The response begins with 'I'm sorry', which is an apologetic phrase.（回答以『I'm sorry』開頭，這是一個道歉的用語。）」
+
+現在我們來放大看第一列的第三個項目：
+
+![第一列第三個項目的細節](@orig/images/details2.png)
+
+這個輸出兩個斷言都通過了！
+
+**請記得，這個資料集對於真實的評估來說太小了。**
+
+promptfoo 內建的模型評分斷言非常有用，但在某些情況下，我們可能需要對確切的模型評分指標和流程有更多的控制。在下一課，我們會看看怎麼定義我們自己的**自訂模型評分函式**！
+
+---
+
+## 📌 重點整理
+
+- **程式評分**最便宜、最客觀，但只能評「可以用程式判斷」的東西；**語氣、適當性、是否拒絕**這類主觀標準要用**模型評分**。
+- promptfoo 內建的 **`llm-rubric`**：
+  ```yaml
+  assert:
+    - type: llm-rubric
+      provider: anthropic:messages:評審模型
+      value: '用一句話寫評分標準'
+  ```
+- 可以同時放**多個斷言**，從不同面向評分（例如「有拒絕」+「沒道歉」）。
+- 這一課的提示詞演進：基本版 → 加上「可以回答的科目清單」→ 再加上「拒絕時不要道歉，溫和引導」。
+- 評審模型也會說明理由，點放大鏡就能看到，方便我們理解失敗的原因。
+
+👉 下一課：[4-9 用 promptfoo 自訂模型評分的評估](../09_custom_model_graded_prompt_foo/lesson.md)

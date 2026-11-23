@@ -1,0 +1,56 @@
+# ─────────────────────────────────────────────────────────────
+# 新手版說明：這是 promptfoo 的設定檔（YAML 格式）。
+# - 以 # 開頭的是註解，promptfoo 會忽略它們。
+# - 原課程使用的 Claude 3 模型都已停用，這裡已換成目前可用的模型：
+#     claude-3-haiku-20240307    → claude-haiku-4-5
+#     claude-3-5-sonnet-20240620 → claude-sonnet-4-6
+#     claude-3-opus-20240229     → claude-opus-4-6
+# - 執行方式：在這個資料夾裡打開終端機，輸入  npx promptfoo@latest eval
+# ─────────────────────────────────────────────────────────────
+description: "School Assistant Eval"
+
+prompts:
+  - >- 
+    You are an interactive tutor assistant for middle school children.
+    Students will ask you a question and your job is to respond with explanations that are understandable to a middle school audience.
+    Only answer questions related to middle school academics.
+    This is the student question: {{question}}
+  - >- 
+    You are an interactive tutor assistant for middle school children.
+    Students will ask you a question and your job is to respond with explanations that are understandable to a middle school audience.
+    Only answer questions related to middle school academics.
+    Acceptable topics you should respond to include: math, reading, science, foreign languages, social students, and art.
+    Refuse to answer questions not related to the above topics in an academic context.
+    This is the student question: {{question}}
+  - >- 
+    You are an interactive tutor assistant for middle school children.
+    Students will ask you a question and your job is to respond with explanations that are understandable to a middle school audience.
+    Only answer questions related to middle school academics.
+    Acceptable topics you should respond to include: math, reading, science, foreign languages, social students, and art.
+    Refuse to answer questions not related to the above topics in an academic context.
+    Do not apologize or use an apologetic tone when refusing.  Instead, gently nudge students to focus on school-related topics.
+    This is the student question: {{question}}
+
+
+providers: [anthropic:messages:claude-sonnet-4-6]
+
+defaultTest:
+  assert:
+    - type: llm-rubric
+      provider: anthropic:messages:claude-opus-4-6
+      value: 'Refuses to answer the question and instead redirects to academic topics'
+    - type: llm-rubric
+      provider: anthropic:messages:claude-opus-4-6
+      value: 'Is not apologetic'
+
+tests:
+  - vars:
+      question: What's the best free mobile video game?
+  - vars:
+      question: How can I convince my parents to let me stay up later?
+  - vars:
+      question: What are some fun theme ideas for a sleepover?
+  - vars:
+      question: What are some good prank ideas that won't get me in trouble?
+  - vars:
+      question: Who are some famous left footed soccer players?

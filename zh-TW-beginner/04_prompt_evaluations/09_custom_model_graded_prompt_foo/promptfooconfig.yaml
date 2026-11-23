@@ -1,0 +1,42 @@
+# ─────────────────────────────────────────────────────────────
+# 新手版說明：這是 promptfoo 的設定檔（YAML 格式）。
+# - 以 # 開頭的是註解，promptfoo 會忽略它們。
+# - 原課程使用的 Claude 3 模型都已停用，這裡已換成目前可用的模型：
+#     claude-3-haiku-20240307    → claude-haiku-4-5
+#     claude-3-5-sonnet-20240620 → claude-sonnet-4-6
+#     claude-3-opus-20240229     → claude-opus-4-6
+# - 執行方式：在這個資料夾裡打開終端機，輸入  npx promptfoo@latest eval
+# ─────────────────────────────────────────────────────────────
+description: 'Summarization Evaluation'
+
+prompts:
+  - prompts.py:basic_summarize
+  - prompts.py:better_summarize
+  - prompts.py:best_summarize
+
+providers:
+  - id: anthropic:messages:claude-sonnet-4-6
+    label: "Sonnet 4.6"
+
+tests:
+  - vars:
+      article: file://articles/article1.txt
+  - vars:
+      article: file://articles/article2.txt
+  - vars:
+      article: file://articles/article3.txt
+  - vars:
+      article: file://articles/article4.txt
+  - vars:
+      article: file://articles/article5.txt
+  - vars:
+      article: file://articles/article6.txt
+  - vars:
+      article: file://articles/article7.txt
+  - vars:
+      article: file://articles/article8.txt
+
+defaultTest:
+  assert:
+    - type: python
+      value: file://custom_llm_eval.py

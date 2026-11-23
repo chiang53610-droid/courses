@@ -1,0 +1,27 @@
+# ─────────────────────────────────────────────────────────────
+# 新手版說明：這是 promptfoo 的設定檔（YAML 格式）。
+# - 以 # 開頭的是註解，promptfoo 會忽略它們。
+# - 原課程使用的 Claude 3 模型都已停用，這裡已換成目前可用的模型：
+#     claude-3-haiku-20240307    → claude-haiku-4-5
+#     claude-3-5-sonnet-20240620 → claude-sonnet-4-6
+#     claude-3-opus-20240229     → claude-opus-4-6
+# - 執行方式：在這個資料夾裡打開終端機，輸入  npx promptfoo@latest eval
+# ─────────────────────────────────────────────────────────────
+description: "Animal Legs Eval"
+
+prompts:
+  - prompts.py:simple_prompt
+  - prompts.py:better_prompt
+  - prompts.py:chain_of_thought_prompt
+  
+providers:
+  - anthropic:messages:claude-haiku-4-5
+  - anthropic:messages:claude-sonnet-4-6
+
+tests: animal_legs_tests.csv
+
+defaultTest:
+  options:
+    transform: file://transform.py
+
+
