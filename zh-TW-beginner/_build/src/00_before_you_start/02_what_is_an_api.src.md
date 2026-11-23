@@ -74,7 +74,7 @@ print(response.content[0].text)    # 把 Claude 的回答印出來
 
 ## 5. 提示詞（Prompt）是什麼？
 
-**提示詞（prompt）**就是你傳給 Claude 的文字——你的問題、指令、資料。
+<strong>提示詞（prompt）</strong>就是你傳給 Claude 的文字——你的問題、指令、資料。
 同樣的問題，**換個問法**，Claude 的回答品質可能差很多。
 研究「怎麼寫提示詞才能得到最好的回答」，就叫做**提示詞工程（prompt engineering）**。這是第 2、3 單元的主題。
 

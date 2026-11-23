@@ -47,7 +47,7 @@
 
 ### 2. 提示詞工程互動教學
 
-> 原課程：`prompt_engineering_interactive_tutorial/`｜學會寫出讓 Claude 回答得又好又準的提示詞。每章都有**練習（自動批改）**和**範例遊樂場**。
+> 原課程：`prompt_engineering_interactive_tutorial/`｜學會寫出讓 Claude 回答得又好又準的提示詞。每章都有<strong>練習（自動批改）</strong>和**範例遊樂場**。
 
 | 章 | 內容 | 程度 |
 |---|---|---|
@@ -123,7 +123,7 @@
 | Claude 3 Opus | `claude-3-opus-20240229` | `claude-opus-4-6` |
 | Python SDK | `pip install anthropic`（最新版） | `pip install "anthropic<1"`（0.x 版） |
 
-- 選這些模型和 SDK 版本，是因為它們仍支援原課程用到的 **`temperature` 參數**和 **prefill（預先填寫回答）**技巧，而且預設不會先「思考」，回應格式和原課程一致。有幾個地方因為模型限制做了個別調整，會在該課說明。
+- 選這些模型和 SDK 版本，是因為它們仍支援原課程用到的 **`temperature` 參數**和 <strong>prefill（預先填寫回答）</strong>技巧，而且預設不會先「思考」，回應格式和原課程一致。有幾個地方因為模型限制做了個別調整，會在該課說明。
 - 每課顯示的「**原課程執行結果**」是用舊模型跑出來的，**你自己跑的結果一定會不同**，這是正常的。
 - 學完課程、做自己的專案時，建議改用最新的模型（例如 `claude-opus-5-5`、`claude-sonnet-5-5`、`claude-haiku-5-5`）和最新版 SDK，並留意它們不支援 prefill 和 `temperature`、部分不支援強制 `tool_choice`。詳見 [0-3 的說明](00_before_you_start/03_setup_your_computer.md#-2026-更新為什麼模型名稱和原課程不一樣)。
 
@@ -139,7 +139,7 @@
   - 生活化的比喻、名詞解釋、常見錯誤提醒
   - 原課程沒有提供答案的練習，補上參考答案（收在可以展開的區塊裡）
   - 原課程的小錯誤（錯字、程式碼小瑕疵）會在旁邊註明
-- **新增「0. 開始之前」單元**和**[名詞小辭典](GLOSSARY.md)**。
+- **新增「0. 開始之前」單元**和<strong>[名詞小辭典](GLOSSARY.md)</strong>。
 
 ---
 

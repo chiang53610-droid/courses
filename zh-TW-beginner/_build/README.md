@@ -9,6 +9,8 @@
 | `build.py` | 把 `src/**/*.src.md` 轉成可執行的 `.ipynb` 和方便閱讀的 `.md` |
 | `assets.py` | 把第 4 單元 promptfoo 課程（第 5～9 課）需要的設定檔、資料檔複製過來，並更新模型名稱、加上中文註解 |
 | `dump.py` | 把原始英文 notebook 印成「編號 + 內容」，方便對照翻譯時查格子編號 |
+| `build_html.py` | 把產生出來的 `.md` 轉成**網頁版**（單頁式網站：側邊目錄、全文搜尋、學習進度、深色模式），輸出到 `_build/site/` |
+| `html_shell.html` | 網頁版的外殼（版面、樣式、程式），`build_html.py` 會把課程目錄填進去 |
 | `src/` | 每一課的原稿 |
 
 ## 原稿格式
@@ -31,4 +33,12 @@ python zh-TW-beginner/_build/build.py            # 建置全部
 python zh-TW-beginner/_build/build.py 05_tool    # 只建置路徑含有 05_tool 的原稿
 python zh-TW-beginner/_build/assets.py           # 更新 promptfoo 課程的附屬檔案
 python zh-TW-beginner/_build/dump.py tool_use/02_your_first_simple_tool.ipynb   # 查看原始 notebook 的格子編號
+
+pip install markdown-it-py pygments pillow
+python zh-TW-beginner/_build/build_html.py       # 產生網頁版到 zh-TW-beginner/_build/site/
 ```
+
+網頁版的課程順序和側邊欄標題，都是讀 `zh-TW-beginner/README.md`「完整目錄」裡的表格，新增課程時記得也加到那裡。
+`_build/site/` 是產生出來的檔案，不放進 git；用 `python -m http.server` 在那個資料夾裡開，就能在瀏覽器預覽。
+
+> 小提醒：中文標點（例如 `）`、`」`）緊貼在 `**粗體**` 的內側、外面又直接接中文字時，Markdown 的粗體會失效（GitHub 上也一樣），這種地方請改用 `<strong>…</strong>`。`build_html.py` 會把失效的地方列出來。

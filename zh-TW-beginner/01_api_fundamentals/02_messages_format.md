@@ -112,7 +112,7 @@ messages = [
 
 ![訊息必須在 user 與 assistant 之間交替](../../anthropic_api_fundamentals/images/alternating_messages.png)
 
-訊息格式讓我們可以用「對話」的形式來組織對 Claude 的 API 呼叫，達到**保留上下文（context preservation）**的效果：訊息格式可以保存整段對話紀錄（包含使用者和 Claude 雙方的訊息），這確保 Claude 在產生回答時能看到完整的對話脈絡，回答也就會更連貫、更切題。
+訊息格式讓我們可以用「對話」的形式來組織對 Claude 的 API 呼叫，達到<strong>保留上下文（context preservation）</strong>的效果：訊息格式可以保存整段對話紀錄（包含使用者和 Claude 雙方的訊息），這確保 Claude 在產生回答時能看到完整的對話脈絡，回答也就會更連貫、更切題。
 
 **注意：很多使用情境根本不需要對話紀錄，`messages` 串列裡只放一則訊息，完全沒有問題！**
 

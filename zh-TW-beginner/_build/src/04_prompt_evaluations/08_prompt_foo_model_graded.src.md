@@ -6,7 +6,7 @@
 
 ## 🎯 這一課你會學到
 
-- 什麼是**模型評分（model-graded）**的評估：讓 LLM 當「評審」
+- 什麼是<strong>模型評分（model-graded）</strong>的評估：讓 LLM 當「評審」
 - 使用 promptfoo 內建的 **`llm-rubric`** 斷言
 - 一次用**兩個評分標準**評估三個版本的提示詞
 
