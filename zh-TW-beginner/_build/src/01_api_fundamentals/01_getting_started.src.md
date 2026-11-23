@@ -1,0 +1,199 @@
+<!--meta {"orig": "anthropic_api_fundamentals/01_getting_started.ipynb", "out": "01_api_fundamentals/01_getting_started"} -->
+# 1-1 開始使用 Claude SDK
+
+> 📚 **第 1 單元：Claude API 基礎**｜第 1 課 / 共 6 課
+> ⏱️ 預估時間：20 分鐘
+
+## 🎯 這一課你會學到
+
+在這第一課中，你會學到：
+* 安裝必要的套件，並通過 API 的身分驗證
+* 對 Claude AI 助理送出你的第一個請求
+
+> 🧩 **白話小補充**：「身分驗證（authenticate）」就是向 Anthropic 證明「我是有付費帳號的人」，方法是附上你的 API 金鑰。如果你還不清楚 API、SDK、金鑰是什麼，請先讀 [0-2 什麼是 API？](../00_before_you_start/02_what_is_an_api.md)。
+
+---
+
+## 安裝 SDK
+
+在開始使用 SDK 之前，請先確認你的電腦已經裝好 Python。
+
+Claude 的 Python SDK 需要 **Python 3.7.1 或更新的版本**。
+
+你可以在終端機輸入下面這行指令，查看目前的 Python 版本：
+
+```
+python --version
+```
+
+如果你還沒有安裝 Python，或是版本比 3.7.1 舊，請到 [Python 官方網站](https://www.python.org) 依照你的作業系統安裝。
+
+> 💡 **小提醒**：詳細的安裝步驟（含圖解說明、Windows/Mac 差異）請看 [0-3 準備你的電腦](../00_before_you_start/03_setup_your_computer.md)。如果你已經照著 0-3 做完，下面的安裝步驟可以跳過。
+
+Python 準備好之後，就可以用 `pip` 安裝 Anthropic 套件了：
+
+{{cell 5}}
+
+**逐行解說：**
+- `# ...`：以 `#` 開頭的是註解，給人看的說明。
+- `%pip install "anthropic<1"`：在 notebook 裡安裝 `anthropic` 套件。
+- 最後一行被註解掉了，它是「如果你是在終端機（而不是 notebook）裡安裝，就打這行」。
+
+> 🔄 **2026 更新**：原課程這裡是 `%pip install anthropic`（安裝最新版）。新手版改成 `"anthropic<1"`，安裝 0.x 版，這樣原課程的程式碼（例如第 4 課的 `temperature`）才能原封不動地執行。原因詳見 [0-3 的說明](../00_before_you_start/03_setup_your_computer.md#-2026-更新為什麼模型名稱和原課程不一樣)。
+
+---
+
+## 取得 API 金鑰
+
+要讓你的請求通過 Claude API 的身分驗證，你需要一組 **API 金鑰**。
+
+請依照下面的步驟取得 API 金鑰：
+
+1. 如果你還沒有帳號，請先到 <https://console.anthropic.com> 註冊一個 Anthropic 帳號。
+2. 建立帳號並登入後，前往「API 設定」頁面。你可以點右上角的個人頭像，從下拉選單選擇「API Keys」；或者到「Settings（設定）」分頁裡找到「API Keys」選單。
+3. 在 API 設定頁面上，按下「**Create Key**（建立金鑰）」按鈕。畫面會跳出一個小視窗，請你幫金鑰取一個好辨認的名字。建議取一個能看出「這把金鑰是用在哪個用途或專案」的名字。你的帳號裡可以建立任意多把金鑰（注意：用量限制和訊息數量限制是以「帳號」為單位計算的，不是以「金鑰」為單位）。
+4. 輸入名字後，按下「**Create**（建立）」按鈕。你的新金鑰就會產生並顯示在畫面上。
+   > ⚠️ **請一定要把金鑰複製下來**，因為一旦離開這個頁面，你就**再也看不到它了**。
+
+![申請 API 金鑰的畫面](@orig/images/signup.png)
+
+請記住：API 金鑰是很敏感的資訊，拿到它的人就能使用你的 Anthropic 帳號。請把它當成密碼一樣保管，**絕對不要公開分享**，也**不要提交（commit）到 Git 這類版本控制系統**裡。
+
+> 🧩 **白話小補充**：「commit 到 Git」可以簡單理解成「上傳到 GitHub 之類的程式碼分享網站」。很多人不小心把金鑰上傳到公開的 GitHub，幾分鐘內就被壞人拿去盜用了。
+
+---
+
+## 安全地儲存你的 API 金鑰
+
+雖然你可以把 API 金鑰直接寫死（hardcode）在 Python 程式碼裡，但一般認為比較好的做法是：**把金鑰這類敏感資訊和程式碼分開存放**。
+
+一個常見的方法是：把 API 金鑰存在一個 **`.env` 檔案**裡，再用 **`python-dotenv`** 套件把它讀進來。設定方法如下：
+
+**第一步**：在你的 notebook 所在的同一個資料夾裡，建立一個新檔案，檔名叫做 `.env`。
+
+> 💡 **新手版建議**：把 `.env` 放在**課程最上層的資料夾**（`courses/`）。`python-dotenv` 在目前資料夾找不到 `.env` 時，會自動往上層資料夾找，所以放在最上層的話，所有課程的 notebook 都能共用同一個 `.env`。
+
+**第二步**：用下面的格式，把你的 API 金鑰加到剛剛建立的 `.env` 檔案裡：
+
+```
+ANTHROPIC_API_KEY=put-your-api-key-here
+```
+
+（把 `put-your-api-key-here` 換成你自己的金鑰。等號兩邊不要有空格。）
+
+記得要**存檔**！
+
+**第三步**：在終端機或 notebook 裡執行下面的指令，安裝 `python-dotenv` 套件：
+
+{{cell 10}}
+
+**第四步**：現在我們可以用 `dotenv` 模組裡的 `load_dotenv()` 函式，從 `.env` 檔案讀取 API 金鑰了。程式碼如下：
+
+{{cell 12}}
+
+**逐行解說：**
+- `from dotenv import load_dotenv`：從 `dotenv` 套件裡拿出 `load_dotenv` 這個函式。
+- `import os`：拿出 Python 內建的 `os` 模組，它可以讀取「環境變數」。
+- `load_dotenv()`：找到 `.env` 檔案，把裡面寫的設定（`ANTHROPIC_API_KEY=...`）載入成「環境變數」。
+- `my_api_key = os.getenv("ANTHROPIC_API_KEY")`：讀取名叫 `ANTHROPIC_API_KEY` 的環境變數，放進 `my_api_key` 這個變數裡。
+
+> 🧩 **白話小補充：什麼是環境變數？** 你可以把它想成「電腦（或這次執行的程式）身上帶著的一張便條紙」，上面寫著一些設定，任何程式都可以去讀。把金鑰放在環境變數裡，程式碼本身就不用出現金鑰了。
+
+---
+
+## 用「客戶端」送出基本的請求
+
+裝好 `anthropic` 套件、也讀取了 API 金鑰之後，你就可以開始對 Claude API 送出請求了。
+
+第一步是建立一個**客戶端物件（client object）**，它是你跟 API 互動的主要入口。
+
+{{cell 14}}
+
+**逐行解說：**
+- `from anthropic import Anthropic`：從 `anthropic` 套件拿出 `Anthropic` 這個「客戶端產生器」。
+- `client = Anthropic(api_key=my_api_key)`：用你的金鑰建立一個客戶端，取名叫 `client`。之後所有跟 Claude 的溝通都透過它。
+
+> 🧩 **白話小補充**：「客戶端（client）」就像你手上的「點餐 App」。建立一次之後，就可以用它一直點餐（送請求），不用每次都重新登入。
+
+要注意的是：`anthropic` SDK 會**自動尋找**一個叫做 `ANTHROPIC_API_KEY` 的環境變數，所以你其實不需要手動把金鑰傳進去，可以直接這樣寫：
+
+```py
+from anthropic import Anthropic
+
+client = Anthropic()
+```
+
+---
+
+## 送出你的第一個請求！
+
+客戶端建立好了，現在來送出第一個請求吧。
+
+要傳訊息給 Claude 並取得回覆，我們會使用 `client` 物件的 **`messages.create()`** 方法。
+各個參數的意義和回應的格式，我們下一課再詳細介紹。現在，先試著執行下面的程式碼，你應該會收到 Claude 傳給你的第一則訊息！
+
+{{cell 17}}
+
+**逐行解說**（先有個印象就好，下一課會詳細講）：
+- `our_first_message = client.messages.create(...)`：送出請求，把 Claude 的回應存進 `our_first_message` 變數。
+- `model="claude-haiku-4-5"`：指定要用哪一個 Claude 模型（原課程是 `claude-3-haiku-20240307`，已停用，新手版換成 Haiku 4.5）。
+- `max_tokens=1000`：Claude 的回答最多 1000 個 token。
+- `messages=[...]`：我們要傳給 Claude 的訊息。這裡只有一則，角色是 `"user"`（我們），內容是「嗨！請幫我寫一首關於寵物雞的俳句」。
+- `print(our_first_message.content[0].text)`：把回應裡的文字印出來。（`content[0].text` 怎麼讀，請見 [0-4 第 12 節](../00_before_you_start/04_python_crash_course.md#12-物件與點看懂-responsecontent0text)）
+
+原課程的執行結果是一首英文俳句，意思大概是：「羽毛朋友咕咕叫，整天在泥土裡扒呀扒，忠心的寵物雞。」
+
+> 🧩 **白話小補充**：俳句（haiku）是日本的短詩，三行、音節數是 5-7-5。這也是 Claude 最小的模型叫「Haiku」的由來。
+
+> 💡 **小提醒**：你可以把 `content` 裡的英文改成中文試試看，例如 `"請寫一首關於寵物雞的俳句"`，Claude 也能用中文回答。
+
+---
+
+## ✏️ 練習
+
+我們才剛開始，所以這個練習可能會讓你覺得有點太簡單。不過，把基本功練熟總是好事。
+
+請完成以下步驟：
+1. 建立一個新的 notebook 或 Python 程式檔。
+2. 匯入（import）需要的套件。
+3. 讀取你的 Anthropic API 金鑰。
+4. 請 Claude 講一個笑話，然後把結果印出來（你可以複製上面的程式碼再修改）。
+
+```python run
+# 在這裡寫你的練習答案（也可以照題目說的，開一個新的 notebook 來寫）
+
+```
+
+<details>
+<summary>👀 卡住了嗎？點這裡看參考答案</summary>
+
+```python
+from dotenv import load_dotenv
+from anthropic import Anthropic
+
+load_dotenv()          # 讀取 .env 裡的 API 金鑰
+client = Anthropic()   # 自動使用 ANTHROPIC_API_KEY
+
+response = client.messages.create(
+    model="claude-haiku-4-5",
+    max_tokens=1000,
+    messages=[
+        {"role": "user", "content": "請講一個笑話給我聽"}
+    ]
+)
+print(response.content[0].text)
+```
+
+</details>
+
+---
+
+## 📌 重點整理
+
+- 安裝套件：`pip install "anthropic<1" python-dotenv`。
+- API 金鑰在 <https://console.anthropic.com> 申請，**只會顯示一次**，要馬上複製；**不能外流**。
+- 金鑰存在 `.env` 檔：`ANTHROPIC_API_KEY=你的金鑰`，用 `load_dotenv()` 讀取。
+- `client = Anthropic()` 建立客戶端（會自動讀 `ANTHROPIC_API_KEY`）。
+- `client.messages.create(model=..., max_tokens=..., messages=[...])` 送出請求；`response.content[0].text` 取出回答。
+
+👉 下一課：[1-2 訊息格式](02_messages_format.md)
