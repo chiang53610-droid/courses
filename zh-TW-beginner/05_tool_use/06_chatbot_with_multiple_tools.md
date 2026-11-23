@@ -1,0 +1,1130 @@
+<!-- 本檔由 _build/build.py 自動產生，請修改 _build/src 中的原稿 -->
+> 📓 想要動手執行程式碼？請打開同一個資料夾裡的 [`06_chatbot_with_multiple_tools.ipynb`](06_chatbot_with_multiple_tools.ipynb)。
+
+# 5-6 使用多個工具的聊天機器人
+
+> 📚 **第 5 單元：工具使用**｜第 6 課 / 共 6 課（最後一課！）
+> ⏱️ 預估時間：60 分鐘
+
+## 🎯 這一課你會學到
+
+- 給 Claude **一整組工具**，讓它自己挑選該用哪一個
+- 用一個「**假資料庫**」類別（class）模擬真實的系統
+- 寫一個 `process_tool_call` 函式，把 Claude 的工具請求對應到實際的程式
+- 把所有東西組合成一個**互動式的客服聊天機器人**
+- 用系統提示詞改善聊天體驗：不提工具、資訊不足時先問、只顯示 `<reply>` 裡的內容
+
+> 🔄 **2026 更新**：這一課原本使用 `claude-3-sonnet-20240229`（以及註解掉的 `claude-3-opus-20240229`），新手版換成 `claude-sonnet-4-6`（和 `claude-opus-4-6`）。截圖是原課程用舊模型的結果。
+
+---
+
+現在我們要把工具使用帶到另一個層次！我們要提供 Claude **一整套工具**讓它選擇。我們的目標是為一家虛構的電子產品公司 **TechNova** 打造一個簡單的**客服聊天機器人**。它可以使用的簡單工具包括：
+
+* `get_user`：用 email、使用者名稱或電話號碼查詢使用者資料
+* `get_order_by_id`：直接用訂單編號查詢一筆訂單
+* `get_customer_orders`：查詢某位顧客的所有訂單
+* `cancel_order`：用指定的訂單編號取消一筆訂單
+
+這個聊天機器人的功能會相當有限，但它展示了使用多個工具時的幾個關鍵重點。
+
+這張圖展示了和聊天機器人的一段範例互動：
+
+![和聊天機器人的範例互動 1](../../tool_use/images/conversation1.png)
+
+這是另一段和聊天機器人的互動，我們在 Claude 每次使用工具時都明確地印出一則訊息，讓你更容易了解幕後發生了什麼事：
+
+![和聊天機器人的範例互動 2（顯示工具使用紀錄）](../../tool_use/images/conversation2.png)
+
+這張圖顯示了單一一則聊天訊息可能的資訊流動：
+
+![單一聊天訊息的資訊流動圖](../../tool_use/images/chat_diagram.png)
+
+**重要提醒：這個聊天機器人非常簡單，只要知道下單使用者的使用者名稱或 email，任何人都可以取消訂單。這個實作是為了教學目的，未經修改請不要整合到真實的程式碼中！**
+
+---
+
+## 我們的假資料庫
+
+在開始使用 Claude 之前，我們先定義一個非常簡單的 **`FakeDatabase`（假資料庫）類別**，裡面放一些假的顧客和訂單，並提供讓我們和資料互動的方法。在真實世界中，聊天機器人應該會連接到一個或多個**真正的**資料庫。
+
+<details>
+<summary>💻 這格程式碼很長（裡面主要是範例文件），點這裡展開</summary>
+
+```python
+class FakeDatabase:
+    def __init__(self):
+        self.customers = [
+            {"id": "1213210", "name": "John Doe", "email": "john@gmail.com", "phone": "123-456-7890", "username": "johndoe"},
+            {"id": "2837622", "name": "Priya Patel", "email": "priya@candy.com", "phone": "987-654-3210", "username": "priya123"},
+            {"id": "3924156", "name": "Liam Nguyen", "email": "lnguyen@yahoo.com", "phone": "555-123-4567", "username": "liamn"},
+            {"id": "4782901", "name": "Aaliyah Davis", "email": "aaliyahd@hotmail.com", "phone": "111-222-3333", "username": "adavis"},
+            {"id": "5190753", "name": "Hiroshi Nakamura", "email": "hiroshi@gmail.com", "phone": "444-555-6666", "username": "hiroshin"},
+            {"id": "6824095", "name": "Fatima Ahmed", "email": "fatimaa@outlook.com", "phone": "777-888-9999", "username": "fatimaahmed"},
+            {"id": "7135680", "name": "Alejandro Rodriguez", "email": "arodriguez@protonmail.com", "phone": "222-333-4444", "username": "alexr"},
+            {"id": "8259147", "name": "Megan Anderson", "email": "megana@gmail.com", "phone": "666-777-8888", "username": "manderson"},
+            {"id": "9603481", "name": "Kwame Osei", "email": "kwameo@yahoo.com", "phone": "999-000-1111", "username": "kwameo"},
+            {"id": "1057426", "name": "Mei Lin", "email": "meilin@gmail.com", "phone": "333-444-5555", "username": "mlin"}
+        ]
+
+        self.orders = [
+            {"id": "24601", "customer_id": "1213210", "product": "Wireless Headphones", "quantity": 1, "price": 79.99, "status": "Shipped"},
+            {"id": "13579", "customer_id": "1213210", "product": "Smartphone Case", "quantity": 2, "price": 19.99, "status": "Processing"},
+            {"id": "97531", "customer_id": "2837622", "product": "Bluetooth Speaker", "quantity": 1, "price": "49.99", "status": "Shipped"}, 
+            {"id": "86420", "customer_id": "3924156", "product": "Fitness Tracker", "quantity": 1, "price": 129.99, "status": "Delivered"},
+            {"id": "54321", "customer_id": "4782901", "product": "Laptop Sleeve", "quantity": 3, "price": 24.99, "status": "Shipped"},
+            {"id": "19283", "customer_id": "5190753", "product": "Wireless Mouse", "quantity": 1, "price": 34.99, "status": "Processing"},
+            {"id": "74651", "customer_id": "6824095", "product": "Gaming Keyboard", "quantity": 1, "price": 89.99, "status": "Delivered"},
+            {"id": "30298", "customer_id": "7135680", "product": "Portable Charger", "quantity": 2, "price": 29.99, "status": "Shipped"},
+            {"id": "47652", "customer_id": "8259147", "product": "Smartwatch", "quantity": 1, "price": 199.99, "status": "Processing"},
+            {"id": "61984", "customer_id": "9603481", "product": "Noise-Cancelling Headphones", "quantity": 1, "price": 149.99, "status": "Shipped"},
+            {"id": "58243", "customer_id": "1057426", "product": "Wireless Earbuds", "quantity": 2, "price": 99.99, "status": "Delivered"},
+            {"id": "90357", "customer_id": "1213210", "product": "Smartphone Case", "quantity": 1, "price": 19.99, "status": "Shipped"},
+            {"id": "28164", "customer_id": "2837622", "product": "Wireless Headphones", "quantity": 2, "price": 79.99, "status": "Processing"}
+        ]
+
+    def get_user(self, key, value):
+        if key in {"email", "phone", "username"}:
+            for customer in self.customers:
+                if customer[key] == value:
+                    return customer
+            return f"Couldn't find a user with {key} of {value}"
+        else:
+            raise ValueError(f"Invalid key: {key}")
+        
+        return None
+
+    def get_order_by_id(self, order_id):
+        for order in self.orders:
+            if order["id"] == order_id:
+                return order
+        return None
+    
+    def get_customer_orders(self, customer_id):
+        return [order for order in self.orders if order["customer_id"] == customer_id]
+
+    def cancel_order(self, order_id):
+        order = self.get_order_by_id(order_id)
+        if order:
+            if order["status"] == "Processing":
+                order["status"] = "Cancelled"
+                return "Cancelled the order"
+            else:
+                return "Order has already shipped.  Can't cancel it."
+        return "Can't find that order!"
+```
+
+</details>
+
+**逐行解說：**
+- `class FakeDatabase:`：定義一個**類別**。類別就像一張「設計圖」，可以照著它做出「物件」。
+- `def __init__(self):`：建立物件時會自動執行的「初始化」函式，在這裡準備好兩份資料：
+  - `self.customers`：10 位顧客，每位都有 id、姓名、email、電話、使用者名稱。
+  - `self.orders`：一串訂單，每筆都有訂單 id、顧客 id、商品、數量、價格、狀態（Shipped 已出貨／Processing 處理中／Delivered 已送達）。
+  - `self.` 代表「這個物件自己的」資料。
+- `get_user(self, key, value)`：如果 `key` 是 email、phone、username 其中之一，就找出那個欄位等於 `value` 的顧客；找不到就回傳「找不到 {key} 為 {value} 的使用者」；`key` 不合法就丟出錯誤。
+- `get_order_by_id(self, order_id)`：用訂單 id 找訂單，找不到回傳 `None`。
+- `get_customer_orders(self, customer_id)`：用串列生成式找出這位顧客的所有訂單。
+- `cancel_order(self, order_id)`：找到訂單後，**只有狀態是「Processing（處理中）」的才能取消**，取消後狀態改成「Cancelled」；已出貨的回傳「訂單已經出貨，無法取消」；找不到回傳「找不到那筆訂單！」。
+
+> 🧩 **白話小補充：類別、物件、方法**
+> - **類別（class）**：設計圖，例如「資料庫的設計圖」。
+> - **物件（object）**：照設計圖做出來的實體，例如 `db = FakeDatabase()`。
+> - **方法（method）**：寫在類別裡的函式，用「物件.方法()」呼叫，例如 `db.get_user(...)`。
+
+我們建立一個 `FakeDatabase` 的實體（物件）：
+
+```python
+db = FakeDatabase()
+```
+
+我們來確認 `get_user` 方法能正常運作。它預期我們傳入一個 `key`，必須是下面其中之一：
+
+* `"email"`
+* `"username"`
+* `"phone"`
+
+它也預期一個對應的 `value`，用來做基本的搜尋，希望能回傳相符的使用者。
+
+```python
+db.get_user("email", "john@gmail.com")
+```
+
+**▶ 原課程執行結果（你自己跑的時候，Claude 的回答文字會不一樣，這是正常的）：**
+
+```text
+{'id': '1213210',
+ 'name': 'John Doe',
+ 'email': 'john@gmail.com',
+ 'phone': '123-456-7890',
+ 'username': 'johndoe'}
+```
+
+```python
+db.get_user("username", "adavis")
+```
+
+**▶ 原課程執行結果（你自己跑的時候，Claude 的回答文字會不一樣，這是正常的）：**
+
+```text
+{'id': '4782901',
+ 'name': 'Aaliyah Davis',
+ 'email': 'aaliyahd@hotmail.com',
+ 'phone': '111-222-3333',
+ 'username': 'adavis'}
+```
+
+```python
+db.get_user("phone", "666-777-8888")
+```
+
+**▶ 原課程執行結果（你自己跑的時候，Claude 的回答文字會不一樣，這是正常的）：**
+
+```text
+{'id': '8259147',
+ 'name': 'Megan Anderson',
+ 'email': 'megana@gmail.com',
+ 'phone': '666-777-8888',
+ 'username': 'manderson'}
+```
+
+我們也可以呼叫 `get_customer_orders` 並傳入一個顧客 ID，取得屬於某位顧客的所有訂單：
+
+```python
+db.get_customer_orders("1213210")
+```
+
+**▶ 原課程執行結果（你自己跑的時候，Claude 的回答文字會不一樣，這是正常的）：**
+
+```text
+[{'id': '24601',
+  'customer_id': '1213210',
+  'product': 'Wireless Headphones',
+  'quantity': 1,
+  'price': 79.99,
+  'status': 'Shipped'},
+ {'id': '13579',
+  'customer_id': '1213210',
+  'product': 'Smartphone Case',
+  'quantity': 2,
+  'price': 19.99,
+  'status': 'Processing'},
+ {'id': '90357',
+  'customer_id': '1213210',
+  'product': 'Smartphone Case',
+  'quantity': 1,
+  'price': 19.99,
+  'status': 'Shipped'}]
+```
+
+```python
+db.get_customer_orders("9603481")
+```
+
+**▶ 原課程執行結果（你自己跑的時候，Claude 的回答文字會不一樣，這是正常的）：**
+
+```text
+[{'id': '61984',
+  'customer_id': '9603481',
+  'product': 'Noise-Cancelling Headphones',
+  'quantity': 1,
+  'price': 149.99,
+  'status': 'Shipped'}]
+```
+
+如果有訂單 ID，我們也可以直接查詢一筆訂單：
+
+```python
+db.get_order_by_id('24601')
+```
+
+**▶ 原課程執行結果（你自己跑的時候，Claude 的回答文字會不一樣，這是正常的）：**
+
+```text
+{'id': '24601',
+ 'customer_id': '1213210',
+ 'product': 'Wireless Headphones',
+ 'quantity': 1,
+ 'price': 79.99,
+ 'status': 'Shipped'}
+```
+
+最後，我們可以用 `cancel_order` 方法取消一筆訂單。**只有「處理中」的訂單才能取消**，已經出貨的訂單就不能取消了！這個方法預期我們傳入要取消的訂單的 `order_id`。
+
+```python
+#Let's look up an order that has a status of processing:
+db.get_order_by_id("47652")
+```
+
+**▶ 原課程執行結果（你自己跑的時候，Claude 的回答文字會不一樣，這是正常的）：**
+
+```text
+{'id': '47652',
+ 'customer_id': '8259147',
+ 'product': 'Smartwatch',
+ 'quantity': 1,
+ 'price': 199.99,
+ 'status': 'Processing'}
+```
+
+```python
+#Now let's cancel it! 
+db.cancel_order("47652")
+```
+
+**▶ 原課程執行結果（你自己跑的時候，Claude 的回答文字會不一樣，這是正常的）：**
+
+```text
+'Cancelled the order'
+```
+
+```python
+# It's status should now be "Cancelled"
+db.get_order_by_id("47652")
+```
+
+**▶ 原課程執行結果（你自己跑的時候，Claude 的回答文字會不一樣，這是正常的）：**
+
+```text
+{'id': '47652',
+ 'customer_id': '8259147',
+ 'product': 'Smartwatch',
+ 'quantity': 1,
+ 'price': 199.99,
+ 'status': 'Cancelled'}
+```
+
+（註解：「我們來查一筆狀態是處理中的訂單」→「現在我們來取消它！」→「它的狀態現在應該是『已取消』」。）
+
+---
+
+## 撰寫我們的工具
+
+我們已經測試過（非常）簡單的假資料庫功能了，現在來寫定義工具結構的 JSON Schema。我們先看一個非常簡單的工具，它對應我們的 `get_order_by_id` 方法：
+
+```python
+tool1 = {
+        "name": "get_order_by_id",
+        "description": "Retrieves the details of a specific order based on the order ID. Returns the order ID, product name, quantity, price, and order status.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "order_id": {
+                    "type": "string",
+                    "description": "The unique identifier for the order."
+                }
+            },
+            "required": ["order_id"]
+        }
+    }
+```
+
+（說明：「根據訂單 ID 取得特定訂單的詳細資料。回傳訂單 ID、商品名稱、數量、價格和訂單狀態。」）
+
+一如往常，我們包含了名稱、描述和輸入的概覽。在這個例子中，只有一個輸入 `order_id`，而且是必填的。
+
+現在我們來看一個比較複雜的工具，它對應 `get_user` 方法。回想一下，這個方法有兩個參數：
+
+1. 一個 `key` 參數，是下面其中一個字串：
+    * `"email"`
+    * `"username"`
+    * `"phone"`
+2. 一個 `value` 參數，是我們用來搜尋的詞（實際的 email、電話號碼或使用者名稱）
+
+這是對應的工具定義：
+
+```python
+tool2 = {
+        "name": "get_user",
+        "description": "Looks up a user by email, phone, or username.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string",
+                    "enum": ["email", "phone", "username"],
+                    "description": "The attribute to search for a user by (email, phone, or username)."
+                },
+                "value": {
+                    "type": "string",
+                    "description": "The value to match for the specified attribute."
+                }
+            },
+            "required": ["key", "value"]
+        }
+    }
+```
+
+（說明：「用 email、電話或使用者名稱查詢使用者。」`key` 是「用來搜尋使用者的屬性」，`value` 是「指定屬性要比對的值」。）
+
+特別注意我們在 schema 中用 **`enum`** 定義 `key` 的有效選項集合的方式。
+
+我們還有兩個工具要寫，但為了節省時間，我們直接提供你完整、可以使用的工具清單。（歡迎你先自己試著定義看看，當作練習！）
+
+```python
+tools = [
+    {
+        "name": "get_user",
+        "description": "Looks up a user by email, phone, or username.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string",
+                    "enum": ["email", "phone", "username"],
+                    "description": "The attribute to search for a user by (email, phone, or username)."
+                },
+                "value": {
+                    "type": "string",
+                    "description": "The value to match for the specified attribute."
+                }
+            },
+            "required": ["key", "value"]
+        }
+    },
+    {
+        "name": "get_order_by_id",
+        "description": "Retrieves the details of a specific order based on the order ID. Returns the order ID, product name, quantity, price, and order status.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "order_id": {
+                    "type": "string",
+                    "description": "The unique identifier for the order."
+                }
+            },
+            "required": ["order_id"]
+        }
+    },
+    {
+        "name": "get_customer_orders",
+        "description": "Retrieves the list of orders belonging to a user based on a user's customer id.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "customer_id": {
+                    "type": "string",
+                    "description": "The customer_id belonging to the user"
+                }
+            },
+            "required": ["customer_id"]
+        }
+    },
+    {
+        "name": "cancel_order",
+        "description": "Cancels an order based on a provided order_id.  Only orders that are 'processing' can be cancelled",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "order_id": {
+                    "type": "string",
+                    "description": "The order_id pertaining to a particular order"
+                }
+            },
+            "required": ["order_id"]
+        }
+    }
+]
+```
+
+（新增的兩個工具：`get_customer_orders`——「根據使用者的顧客 id，取得屬於這位使用者的訂單清單」；`cancel_order`——「根據提供的 order_id 取消訂單。只有『處理中』的訂單可以取消」。）
+
+---
+
+## 把工具交給 Claude
+
+接下來，我們需要做幾件事：
+1. 告訴 Claude 我們的工具，並把使用者的聊天訊息傳給 Claude。
+2. 處理我們從 Claude 拿回的回應：
+    * 如果 Claude **不想**使用工具：
+        * 把 Claude 的輸出印給使用者看。
+        * 請使用者輸入下一則訊息。
+    * 如果 Claude **想**使用工具：
+        * 確認 Claude 呼叫的是其中一個適當的工具。
+        * 執行背後的函式，例如 `get_user` 或 `cancel_order`。
+        * 把執行工具的結果傳給 Claude。
+
+最終的目標是寫一個命令列程式，建立一個會在迴圈中執行的互動式聊天機器人。但為了簡單起見，我們先**一行一行**地寫基本的程式碼。最後再建立互動式的聊天機器人程式。
+
+我們先寫一個函式，能把 Claude 的工具使用回應，轉換成對 `db` 的實際方法呼叫：
+
+```python
+def process_tool_call(tool_name, tool_input):
+    if tool_name == "get_user":
+        return db.get_user(tool_input["key"], tool_input["value"])
+    elif tool_name == "get_order_by_id":
+        return db.get_order_by_id(tool_input["order_id"])
+    elif tool_name == "get_customer_orders":
+        return db.get_customer_orders(tool_input["customer_id"])
+    elif tool_name == "cancel_order":
+        return db.cancel_order(tool_input["order_id"])
+```
+
+**逐行解說：** `process_tool_call(tool_name, tool_input)` 就像一個「**總機**」：看 Claude 想用哪個工具（`tool_name`），就把它轉接到 `db` 對應的方法，並從 `tool_input` 取出需要的參數。
+
+我們先從一個簡單的示範開始，展示 Claude 在面對多個工具時能決定要用哪一個。我們會問 Claude「`Can you look up my orders? My email is john@gmail.com`」（你可以查一下我的訂單嗎？我的 email 是 john@gmail.com），看看會發生什麼事！
+
+> 💡 **新手版補充**：下一格用 `anthropic.Client()` 建立客戶端，它會讀取 `ANTHROPIC_API_KEY` 環境變數。如果你的金鑰存在 `.env` 檔裡，請先執行這一格：
+
+```python
+from dotenv import load_dotenv
+load_dotenv()
+```
+
+```python
+import anthropic
+import json
+
+client = anthropic.Client()
+MODEL_NAME = "claude-sonnet-4-6"
+
+messages = [{"role": "user", "content": "Can you look up my orders? My email is john@gmail.com"}]
+
+#Send a request to Claude
+response = client.messages.create(
+    model=MODEL_NAME,
+    max_tokens=4096,
+    tools=tools,
+    messages=messages
+)
+```
+
+（`anthropic.Client()` 是 `anthropic.Anthropic()` 的另一個名字，效果一樣。）
+
+```python
+print(response)
+```
+
+**▶ 原課程執行結果（你自己跑的時候，Claude 的回答文字會不一樣，這是正常的）：**
+
+```text
+ToolsBetaMessage(id='msg_0112Ab7iKF2gWeAcAd2XWaBb', content=[TextBlock(text='Sure, let me look up your orders based on your email. To get the user details by email:', type='text'), ToolUseBlock(id='toolu_01CNTeufcesL1sUP2jnwT8TA', input={'key': 'email', 'value': 'john@gmail.com'}, name='get_user', type='tool_use')], model='claude-3-sonnet-20240229', role='assistant', stop_reason='tool_use', stop_sequence=None, type='message', usage=Usage(input_tokens=574, output_tokens=96))
+```
+
+Claude 想使用 `get_user` 工具。
+
+現在我們來寫基本的邏輯：更新 messages 串列、呼叫適當的工具，然後再用工具結果更新 messages 串列。
+
+```python
+# Update messages to include Claude's response
+messages.append(
+    {"role": "assistant", "content": response.content}
+)
+
+#If Claude stops because it wants to use a tool:
+if response.stop_reason == "tool_use":
+    tool_use = response.content[-1] #Naive approach assumes only 1 tool is called at a time
+    tool_name = tool_use.name
+    tool_input = tool_use.input
+    print("Claude wants to use the {tool_name} tool")
+    print(f"Tool Input:")
+    print(json.dumps(tool_input, indent=2))
+
+    #Actually run the underlying tool functionality on our db
+    tool_result = process_tool_call(tool_name, tool_input)
+
+    print(f"\nTool Result:")
+    print(json.dumps(tool_result, indent=2))
+
+    #Add our tool_result message:
+    messages.append(
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": tool_use.id,
+                    "content": str(tool_result),
+                }
+            ],
+        },
+    )
+else: 
+    #If Claude does NOT want to use a tool, just print out the text reponse
+    print("\nTechNova Support:" + f"{response.content[0].text}" )
+```
+
+**▶ 原課程執行結果（你自己跑的時候，Claude 的回答文字會不一樣，這是正常的）：**
+
+```text
+Claude wants to use the {tool_name} tool
+Tool Input:
+{
+  "key": "email",
+  "value": "john@gmail.com"
+}
+
+Tool Result:
+{
+  "id": "1213210",
+  "name": "John Doe",
+  "email": "john@gmail.com",
+  "phone": "123-456-7890",
+  "username": "johndoe"
+}
+```
+
+**逐行解說：**
+- 先把 Claude 的回應加進 messages（註解：「更新 messages，加入 Claude 的回應」）。
+- 如果 Claude 因為想用工具而停下來：
+  - `tool_use = response.content[-1]`（註解：「天真的做法，假設一次只呼叫 1 個工具」）。
+  - 印出工具名稱和輸入（注意 `print("Claude wants to use the {tool_name} tool")` 這行**少了 `f`**，所以會原封不動印出 `{tool_name}`——這是原課程的小錯誤，你可以在下方的輸出看到）。
+  - `process_tool_call(...)`：真的在我們的資料庫上執行工具功能。
+  - 把 `tool_result` 訊息加進 messages。注意 `"content": str(tool_result)`：工具結果是字典，要先用 `str()` 轉成字串。
+- 否則，印出 Claude 的文字回答。
+
+這是我們的 messages 串列現在的樣子：
+
+```python
+messages
+```
+
+**▶ 原課程執行結果（你自己跑的時候，Claude 的回答文字會不一樣，這是正常的）：**
+
+```text
+[{'role': 'user',
+  'content': 'Can you look up my orders? My email is john@gmail.com'},
+ {'role': 'assistant',
+  'content': [TextBlock(text='Sure, let me look up your orders based on your email. To get the user details by email:', type='text'),
+   ToolUseBlock(id='toolu_01CNTeufcesL1sUP2jnwT8TA', input={'key': 'email', 'value': 'john@gmail.com'}, name='get_user', type='tool_use')]},
+ {'role': 'user',
+  'content': [{'type': 'tool_result',
+    'tool_use_id': 'toolu_01CNTeufcesL1sUP2jnwT8TA',
+    'content': "{'id': '1213210', 'name': 'John Doe', 'email': 'john@gmail.com', 'phone': '123-456-7890', 'username': 'johndoe'}"}]}]
+```
+
+現在，我們用更新後的 messages 串列，送出第二個請求給 Claude：
+
+```python
+response2 = client.messages.create(
+    model=MODEL_NAME,
+    max_tokens=4096,
+    tools=tools,
+    messages=messages
+)
+```
+
+```python
+response2
+```
+
+**▶ 原課程執行結果（你自己跑的時候，Claude 的回答文字會不一樣，這是正常的）：**
+
+```text
+ToolsBetaMessage(id='msg_011Fru6wiViEExPXg7ANQkfH', content=[TextBlock(text='Now that I have your customer ID 1213210, I can retrieve your order history:', type='text'), ToolUseBlock(id='toolu_011eHUmUgCZXwr7swzL1LE6y', input={'customer_id': '1213210'}, name='get_customer_orders', type='tool_use')], model='claude-3-sonnet-20240229', role='assistant', stop_reason='tool_use', stop_sequence=None, type='message', usage=Usage(input_tokens=733, output_tokens=80))
+```
+
+現在 Claude 拿到了 `get_user` 工具的結果，包括使用者的 ID，它想呼叫 `get_customer_orders` 來查詢這位顧客的訂單。**它為這份工作挑選了正確的工具。** **注意：** 這裡還有很多潛在的問題和 Claude 可能出錯的地方，但這是一個開始！
+
+> 🧩 **白話小補充**：這就是「**多步驟工具使用**」——Claude 先用 email 查出顧客 ID（`get_user`），再用顧客 ID 查訂單（`get_customer_orders`）。每一步的結果都成為下一步的輸入。
+
+---
+
+## 撰寫互動式程式
+
+透過互動式的命令列程式和這個聊天機器人互動，會容易得多。
+
+下面把上面所有的程式碼組合成一個函式，啟動一個以迴圈為基礎的聊天（你大概會想把它存成一個獨立的程式檔，從命令列執行）：
+
+<details>
+<summary>💻 這格程式碼很長（裡面主要是範例文件），點這裡展開</summary>
+
+```python
+import anthropic
+import json
+
+client = anthropic.Client()
+MODEL_NAME = "claude-sonnet-4-6"
+# MODEL_NAME = "claude-opus-4-6"
+
+class FakeDatabase:
+    def __init__(self):
+        self.customers = [
+            {"id": "1213210", "name": "John Doe", "email": "john@gmail.com", "phone": "123-456-7890", "username": "johndoe"},
+            {"id": "2837622", "name": "Priya Patel", "email": "priya@candy.com", "phone": "987-654-3210", "username": "priya123"},
+            {"id": "3924156", "name": "Liam Nguyen", "email": "lnguyen@yahoo.com", "phone": "555-123-4567", "username": "liamn"},
+            {"id": "4782901", "name": "Aaliyah Davis", "email": "aaliyahd@hotmail.com", "phone": "111-222-3333", "username": "adavis"},
+            {"id": "5190753", "name": "Hiroshi Nakamura", "email": "hiroshi@gmail.com", "phone": "444-555-6666", "username": "hiroshin"},
+            {"id": "6824095", "name": "Fatima Ahmed", "email": "fatimaa@outlook.com", "phone": "777-888-9999", "username": "fatimaahmed"},
+            {"id": "7135680", "name": "Alejandro Rodriguez", "email": "arodriguez@protonmail.com", "phone": "222-333-4444", "username": "alexr"},
+            {"id": "8259147", "name": "Megan Anderson", "email": "megana@gmail.com", "phone": "666-777-8888", "username": "manderson"},
+            {"id": "9603481", "name": "Kwame Osei", "email": "kwameo@yahoo.com", "phone": "999-000-1111", "username": "kwameo"},
+            {"id": "1057426", "name": "Mei Lin", "email": "meilin@gmail.com", "phone": "333-444-5555", "username": "mlin"}
+        ]
+
+        self.orders = [
+            {"id": "24601", "customer_id": "1213210", "product": "Wireless Headphones", "quantity": 1, "price": 79.99, "status": "Shipped"},
+            {"id": "13579", "customer_id": "1213210", "product": "Smartphone Case", "quantity": 2, "price": 19.99, "status": "Processing"},
+            {"id": "97531", "customer_id": "2837622", "product": "Bluetooth Speaker", "quantity": 1, "price": "49.99", "status": "Shipped"}, 
+            {"id": "86420", "customer_id": "3924156", "product": "Fitness Tracker", "quantity": 1, "price": 129.99, "status": "Delivered"},
+            {"id": "54321", "customer_id": "4782901", "product": "Laptop Sleeve", "quantity": 3, "price": 24.99, "status": "Shipped"},
+            {"id": "19283", "customer_id": "5190753", "product": "Wireless Mouse", "quantity": 1, "price": 34.99, "status": "Processing"},
+            {"id": "74651", "customer_id": "6824095", "product": "Gaming Keyboard", "quantity": 1, "price": 89.99, "status": "Delivered"},
+            {"id": "30298", "customer_id": "7135680", "product": "Portable Charger", "quantity": 2, "price": 29.99, "status": "Shipped"},
+            {"id": "47652", "customer_id": "8259147", "product": "Smartwatch", "quantity": 1, "price": 199.99, "status": "Processing"},
+            {"id": "61984", "customer_id": "9603481", "product": "Noise-Cancelling Headphones", "quantity": 1, "price": 149.99, "status": "Shipped"},
+            {"id": "58243", "customer_id": "1057426", "product": "Wireless Earbuds", "quantity": 2, "price": 99.99, "status": "Delivered"},
+            {"id": "90357", "customer_id": "1213210", "product": "Smartphone Case", "quantity": 1, "price": 19.99, "status": "Shipped"},
+            {"id": "28164", "customer_id": "2837622", "product": "Wireless Headphones", "quantity": 2, "price": 79.99, "status": "Processing"}
+        ]
+
+    def get_user(self, key, value):
+        if key in {"email", "phone", "username"}:
+            for customer in self.customers:
+                if customer[key] == value:
+                    return customer
+            return f"Couldn't find a user with {key} of {value}"
+        else:
+            raise ValueError(f"Invalid key: {key}")
+        
+        return None
+
+    def get_order_by_id(self, order_id):
+        for order in self.orders:
+            if order["id"] == order_id:
+                return order
+        return None
+    
+    def get_customer_orders(self, customer_id):
+        return [order for order in self.orders if order["customer_id"] == customer_id]
+
+    def cancel_order(self, order_id):
+        order = self.get_order_by_id(order_id)
+        if order:
+            if order["status"] == "Processing":
+                order["status"] = "Cancelled"
+                return "Cancelled the order"
+            else:
+                return "Order has already shipped.  Can't cancel it."
+        return "Can't find that order!"
+
+tools = [
+    {
+        "name": "get_user",
+        "description": "Looks up a user by email, phone, or username.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string",
+                    "enum": ["email", "phone", "username"],
+                    "description": "The attribute to search for a user by (email, phone, or username)."
+                },
+                "value": {
+                    "type": "string",
+                    "description": "The value to match for the specified attribute."
+                }
+            },
+            "required": ["key", "value"]
+        }
+    },
+    {
+        "name": "get_order_by_id",
+        "description": "Retrieves the details of a specific order based on the order ID. Returns the order ID, product name, quantity, price, and order status.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "order_id": {
+                    "type": "string",
+                    "description": "The unique identifier for the order."
+                }
+            },
+            "required": ["order_id"]
+        }
+    },
+    {
+        "name": "get_customer_orders",
+        "description": "Retrieves the list of orders belonging to a user based on a user's customer id.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "customer_id": {
+                    "type": "string",
+                    "description": "The customer_id belonging to the user"
+                }
+            },
+            "required": ["customer_id"]
+        }
+    },
+    {
+        "name": "cancel_order",
+        "description": "Cancels an order based on a provided order_id.  Only orders that are 'processing' can be cancelled",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "order_id": {
+                    "type": "string",
+                    "description": "The order_id pertaining to a particular order"
+                }
+            },
+            "required": ["order_id"]
+        }
+    }
+]
+
+db = FakeDatabase()
+
+def process_tool_call(tool_name, tool_input):
+    if tool_name == "get_user":
+        return db.get_user(tool_input["key"], tool_input["value"])
+    elif tool_name == "get_order_by_id":
+        return db.get_order_by_id(tool_input["order_id"])
+    elif tool_name == "get_customer_orders":
+        return db.get_customer_orders(tool_input["customer_id"])
+    elif tool_name == "cancel_order":
+        return db.cancel_order(tool_input["order_id"])
+    
+def simple_chat():
+    user_message = input("\nUser: ")
+    messages = [{"role": "user", "content": user_message}]
+    while True:
+        #If the last message is from the assistant, get another input from the user
+        if messages[-1].get("role") == "assistant":
+            user_message = input("\nUser: ")
+            messages.append({"role": "user", "content": user_message})
+
+        #Send a request to Claude
+        response = client.messages.create(
+            model=MODEL_NAME,
+            max_tokens=4096,
+            tools=tools,
+            messages=messages
+        )
+        # Update messages to include Claude's response
+        messages.append(
+            {"role": "assistant", "content": response.content}
+        )
+
+        #If Claude stops because it wants to use a tool:
+        if response.stop_reason == "tool_use":
+            tool_use = response.content[-1] #Naive approach assumes only 1 tool is called at a time
+            tool_name = tool_use.name
+            tool_input = tool_use.input
+            print(f"======Claude wants to use the {tool_name} tool======")
+
+            #Actually run the underlying tool functionality on our db
+            tool_result = process_tool_call(tool_name, tool_input)
+
+            #Add our tool_result message:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tool_use.id,
+                            "content": str(tool_result),
+                        }
+                    ],
+                },
+            )
+        else: 
+            #If Claude does NOT want to use a tool, just print out the text reponse
+            print("\nTechNova Support: " + f"{response.content[0].text}" )
+
+# Start the chat!!
+# simple_chat()
+```
+
+</details>
+
+**這一格包含了：** 客戶端和模型名稱設定、`FakeDatabase` 類別、`tools` 工具清單、`process_tool_call` 函式，以及 `simple_chat()` 函式。
+
+**`simple_chat()` 的運作方式（重點）：**
+- 先請使用者輸入第一則訊息。
+- `while True:` 一直重複：
+  - `if messages[-1].get("role") == "assistant":`：如果最後一則訊息是 Claude 說的（代表輪到使用者了），就請使用者再輸入一則訊息。
+  - 呼叫 Claude，把回應加進 messages。
+  - 如果 Claude 想用工具：印出「Claude 想使用 {工具} 工具」，執行工具，把 `tool_result` 加進 messages（**這時最後一則是 user 的工具結果，所以下一輪會直接再呼叫 Claude，不會請使用者輸入**）。
+  - 否則：印出「TechNova Support: {Claude 的回答}」。
+- 最後一行 `# simple_chat()` 被註解掉了，把 `#` 拿掉就能開始聊天。
+
+> 💡 **小提醒**：這個聊天機器人會一直執行，**沒有設計離開的方式**。在 notebook 裡要停止，可以按工具列的「中斷（Interrupt）」按鈕（方塊圖示）；在終端機執行的話，按 `Ctrl + C`。
+
+這是一段範例對話：
+
+![範例對話：會提到工具](../../tool_use/images/conversation3.png)
+
+可以看到，聊天機器人在需要時會呼叫正確的工具，但實際的聊天回應並不理想。我們大概不希望一個面對顧客的聊天機器人，**告訴使用者它要呼叫哪些特定的工具**！
+
+---
+
+## 改善提示詞
+
+我們可以提供聊天機器人一個紮實的**系統提示詞**，來改善聊天體驗。首先要做的事情之一，是給 Claude 一些背景，告訴它它是 TechNova 的客服助理。
+
+這是系統提示詞的開頭：
+
+```python
+system_prompt = """
+You are a customer support chat bot for an online retailer called TechNova. 
+Your job is to help users look up their account, orders, and cancel orders.
+Be helpful and brief in your responses.
+"""
+```
+
+**翻譯**：「你是一家叫做 TechNova 的線上零售商的客服聊天機器人。你的工作是幫助使用者查詢他們的帳號、訂單，以及取消訂單。回答要有幫助而且簡短。」
+
+呼叫 Claude 時，別忘了把這個提示詞傳進 `system` 參數！
+
+這是加入上面的系統提示詞之後的範例對話：
+
+![加入系統提示詞後的對話](../../tool_use/images/conversation4.png)
+
+注意，助理知道自己是 TechNova 的客服機器人，而且不再告訴使用者它的工具了。也許還值得明確告訴 Claude **完全不要提到工具**。
+
+**注意：** `=======Claude wants to use the cancel_order_tool=======` 這幾行是我們加在程式裡的紀錄，**不是** Claude 實際的輸出！
+
+如果你玩這個程式玩得夠久，可能會注意到其他問題。一個非常明顯、也非常有問題的狀況，在下面這段對話中可以看到：
+
+![Claude 編造 email 去查詢的問題對話](../../tool_use/images/conversation5.png)
+
+上面的截圖是整段對話。使用者請求幫忙取消一筆訂單，並說他們不知道訂單 ID。Claude 應該追問顧客的 email、電話號碼或使用者名稱，來查詢這位顧客，再找出相符的訂單。但 Claude 卻直接決定呼叫 `get_user` 工具，**而它根本不知道任何關於使用者的資訊**。Claude **編造了一個 email 地址**並試著使用它，當然沒有找到相符的顧客。
+
+為了避免這種情況，我們會更新系統提示詞，加入類似這樣的文字：
+
+```python
+system_prompt = """
+You are a customer support chat bot for an online retailer called TechNova. 
+Your job is to help users look up their account, orders, and cancel orders.
+Be helpful and brief in your responses.
+You have access to a set of tools, but only use them when needed.  
+If you do not have enough information to use a tool correctly, ask a user follow up questions to get the required inputs.
+Do not call any of the tools unless you have the required data from a user. 
+"""
+```
+
+**新增的部分翻譯**：「你可以使用一組工具，但只在需要時使用。如果你沒有足夠的資訊可以正確使用工具，就**問使用者追問的問題**，取得需要的輸入。除非你從使用者那裡取得了需要的資料，否則不要呼叫任何工具。」
+
+這是使用更新後系統提示詞的助理對話截圖：
+
+![更新系統提示詞後：會先詢問使用者資訊](../../tool_use/images/conversation6.png)
+
+好多了！
+
+---
+
+## Opus 特有的問題
+
+使用 Opus 搭配工具時，模型常常會在真正回應使用者之前，先把它的想法輸出在 `<thinking>` 或 `<reflection>` 標籤裡。你可以在下面的截圖看到一個例子：
+
+![Opus 把思考過程顯示給使用者](../../tool_use/images/conversation7.png)
+
+這個思考過程通常能帶來更好的結果，但顯然會造成**很糟的使用者體驗**。我們不想把這些思考邏輯暴露給使用者！最簡單的修正方法，是明確地請模型把**面對使用者的回應**輸出在一組特定的 XML 標籤裡。我們先更新系統提示詞：
+
+```python
+system_prompt = """
+You are a customer support chat bot for an online retailer called TechNova. 
+Your job is to help users look up their account, orders, and cancel orders.
+Be helpful and brief in your responses.
+You have access to a set of tools, but only use them when needed.  
+If you do not have enough information to use a tool correctly, ask a user follow up questions to get the required inputs.
+Do not call any of the tools unless you have the required data from a user. 
+
+In each conversational turn, you will begin by thinking about your response. 
+Once you're done, you will write a user-facing response. 
+It's important to place all user-facing conversational responses in <reply></reply> XML tags to make them easy to parse.
+"""
+```
+
+**新增的部分翻譯**：「在每一輪對話中，你會先思考你的回應。思考完之後，你會寫一個面對使用者的回應。很重要的是：把所有面對使用者的對話回應都放在 `<reply></reply>` XML 標籤裡，讓它們容易解析。」
+
+> 🔄 **2026 更新**：這是當年 Claude 3 Opus 的特性。新一代的模型如果需要思考，會使用內建的「延伸思考（extended thinking）」功能，思考內容放在獨立的 `thinking` 內容區塊裡，不會混在文字回答中。不過「把要給使用者看的內容放在特定標籤裡，再用程式擷取」這個技巧（和 [3-5 課](../03_real_world_prompting/05_customer_support_ai.md) 的 `<final_answer>` 一樣）仍然非常實用。
+
+看看一段範例對話輸出：
+
+![Claude 用 reply 標籤包住回應](../../tool_use/images/conversation8.png)
+
+Claude 現在用 `<reply>` 標籤把真正面對使用者的回應包起來了。我們現在只需要擷取這些標籤中間的內容，並確保只把回應的這一部分印給使用者看。下面是一個更新過的聊天函式，正好做到這一點！
+
+```python
+import re
+
+def extract_reply(text):
+    pattern = r'<reply>(.*?)</reply>'
+    match = re.search(pattern, text, re.DOTALL)
+    if match:
+        return match.group(1)
+    else:
+        return None    
+    
+def simple_chat():
+    system_prompt = """
+    You are a customer support chat bot for an online retailer called TechNova. 
+    Your job is to help users look up their account, orders, and cancel orders.
+    Be helpful and brief in your responses.
+    You have access to a set of tools, but only use them when needed.  
+    If you do not have enough information to use a tool correctly, ask a user follow up questions to get the required inputs.
+    Do not call any of the tools unless you have the required data from a user. 
+
+    In each conversational turn, you will begin by thinking about your response. 
+    Once you're done, you will write a user-facing response. 
+    It's important to place all user-facing conversational responses in <reply></reply> XML tags to make them easy to parse.
+    """
+    user_message = input("\nUser: ")
+    messages = [{"role": "user", "content": user_message}]
+    while True:
+        #If the last message is from the assistant, get another input from the user
+        if messages[-1].get("role") == "assistant":
+            user_message = input("\nUser: ")
+            messages.append({"role": "user", "content": user_message})
+
+        #Send a request to Claude
+        response = client.messages.create(
+            model=MODEL_NAME,
+            system=system_prompt,
+            max_tokens=4096,
+            tools=tools,
+            messages=messages
+        )
+        # Update messages to include Claude's response
+        messages.append(
+            {"role": "assistant", "content": response.content}
+        )
+
+        #If Claude stops because it wants to use a tool:
+        if response.stop_reason == "tool_use":
+            tool_use = response.content[-1] #Naive approach assumes only 1 tool is called at a time
+            tool_name = tool_use.name
+            tool_input = tool_use.input
+            print(f"======Claude wants to use the {tool_name} tool======")
+
+
+            #Actually run the underlying tool functionality on our db
+            tool_result = process_tool_call(tool_name, tool_input)
+
+            #Add our tool_result message:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tool_use.id,
+                            "content": str(tool_result),
+                        }
+                    ],
+                },
+            )
+        else: 
+            #If Claude does NOT want to use a tool, just print out the text reponse
+            model_reply = extract_reply(response.content[0].text)
+            print("\nTechNova Support: " + f"{model_reply}" )
+
+# Start the chat!!
+# simple_chat()
+```
+
+**新增的部分：**
+- `extract_reply(text)`：用正規表達式擷取 `<reply>` 和 `</reply>` 中間的內容（`re.DOTALL` 讓 `.` 也能比對換行），找不到就回傳 `None`。
+- 在 `else` 分支（Claude 沒有使用工具時），先 `extract_reply(...)` 再印出，使用者就只會看到 `<reply>` 裡的內容。
+
+> ⚠️ **小提醒**：如果 Claude 這次的回答剛好沒有用 `<reply>` 標籤，`extract_reply` 會回傳 `None`，畫面就會顯示「TechNova Support: None」。更完善的寫法是：找不到標籤時就直接顯示原本的文字，例如 `model_reply = extract_reply(text) or text`。
+
+這是顯示上面修改效果的截圖：
+
+![只顯示 reply 內容的對話](../../tool_use/images/conversation9.png)
+
+---
+
+## 最終版本
+
+這是一段較長對話的截圖，使用的版本會把輸出加上顏色：
+
+![最終版本的彩色對話](../../tool_use/images/conversation10.png)
+
+---
+
+## 結語
+
+這是一個為了說明工具使用流程而製作的教學示範。**這個程式和提示詞還沒有達到可以正式上線的程度。** 助理會回答像「你可以在訂單確認信中找到訂單 ID」這樣的話，但它其實並不知道這是不是真的。在真實世界中，我們（最起碼）需要提供 Claude 大量關於我們公司的背景知識。我們也需要嚴格地測試聊天機器人，確保它在所有情況下都表現良好。另外，讓任何人都能這麼輕易地取消訂單，大概是個壞主意！只要知道別人的 email、使用者名稱或電話號碼，就能輕易取消很多人的訂單。在真實世界中，我們大概會需要某種形式的**身分驗證**。長話短說：這是一個示範，不是一個完整的聊天機器人實作！
+
+---
+
+## ✏️ 練習
+
+* 為我們的助理（以及背後的 `FakeDatabase` 類別）加入功能，讓使用者可以**更新他們的 email 和電話號碼**。
+* 定義一個叫做 **`get_user_info`** 的新工具，把 `get_user` 和 `get_customer_orders` 的功能結合起來。這個工具應該接收使用者的 email、電話或使用者名稱作為輸入，然後**一次**回傳使用者的資訊和他們的訂單紀錄。
+* 加入**錯誤處理**和**輸入驗證**！
+
+#### 加分題
+* 把聊天機器人改成使用一個**真正的**資料庫，而不是我們的 `FakeDatabase` 類別。
+
+```python
+# 在這裡寫你的答案
+
+```
+
+<details>
+<summary>👀 點這裡看前兩題的參考提示（新手版補充，原課程沒有提供答案）</summary>
+
+**1. 更新 email 和電話：** 在 `FakeDatabase` 加一個方法，再定義對應的工具，並在 `process_tool_call` 加一個分支：
+
+```python
+# 加到 FakeDatabase 類別裡（或用下面這種方式動態加上去）
+def update_contact(self, customer_id, email=None, phone=None):
+    for customer in self.customers:
+        if customer["id"] == customer_id:
+            if email:
+                customer["email"] = email
+            if phone:
+                customer["phone"] = phone
+            return customer
+    return f"Couldn't find a user with id {customer_id}"
+
+FakeDatabase.update_contact = update_contact   # 把方法加到類別上
+
+update_contact_tool = {
+    "name": "update_contact",
+    "description": "Updates a customer's email and/or phone number. Requires the customer_id, "
+                   "so look up the user first if you don't have it.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "customer_id": {"type": "string", "description": "The customer's id"},
+            "email": {"type": "string", "description": "The new email address (optional)"},
+            "phone": {"type": "string", "description": "The new phone number (optional)"},
+        },
+        "required": ["customer_id"],
+    },
+}
+```
+
+**2. `get_user_info`：** 先用 `get_user` 找到使用者，再用他的 `id` 呼叫 `get_customer_orders`，把兩者合併回傳：
+
+```python
+def get_user_info(key, value):
+    user = db.get_user(key, value)
+    if isinstance(user, dict):            # 找到了（找不到時 get_user 會回傳一段文字）
+        return {"user": user, "orders": db.get_customer_orders(user["id"])}
+    return user
+```
+
+記得把新工具加進 `tools` 清單，並在 `process_tool_call` 加上對應的 `elif` 分支。
+
+</details>
+
+---
+
+## 📌 重點整理
+
+- 給 Claude **多個工具**，它會根據對話內容**自己挑選**適合的工具，還能**一步接一步**使用（先查使用者 → 再查訂單）。
+- 用一個 **`process_tool_call`** 函式當「總機」，把工具名稱對應到實際的程式。
+- 互動式聊天機器人的關鍵：用迴圈維護 `messages`；最後一則是 assistant 時才請使用者輸入，最後一則是工具結果時就直接再呼叫 Claude。
+- 用**系統提示詞**改善體驗：
+  1. 給角色和背景（TechNova 客服）
+  2. 資訊不足時**先問使用者**，不要自己編造資料去呼叫工具
+  3. 面對使用者的回應放在 `<reply>` 裡，用程式只顯示這部分
+- 教學示範 ≠ 正式產品：還需要公司背景知識、嚴格測試、身分驗證。
+
+---
+
+🎉🎉🎉 **恭喜你完成了整套課程的全部 5 個單元！**
+
+回顧一下你學會了什麼：
+1. **API 基礎**：用 Python 呼叫 Claude、訊息格式、模型、參數、串流、圖片
+2. **提示詞工程**：清楚直接、角色、XML 標籤、格式與 prefill、思考步驟、範例、避免幻覺、複雜提示詞
+3. **真實世界的提示詞**：醫療摘要、通話摘要、客服機器人的完整開發過程
+4. **提示詞評估**：人工、程式、模型評分，以及用 promptfoo 有系統地比較
+5. **工具使用**：讓 Claude 呼叫你的程式、強制 JSON、完整流程、tool_choice、多工具聊天機器人
+
+👉 回到 [課程首頁](../README.md)，或查閱 [名詞小辭典](../GLOSSARY.md) 複習。接下來，試著用學到的技巧做一個你自己感興趣的小專案吧！記得做自己的專案時，可以改用最新的模型（參考 [0-3 的說明](../00_before_you_start/03_setup_your_computer.md#-2026-更新為什麼模型名稱和原課程不一樣)）。
